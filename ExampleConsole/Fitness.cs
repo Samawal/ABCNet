@@ -9,6 +9,6 @@
 		/// <param name="bee">The bee performing the test</param>
 		/// <returns>Returns a value > 0 to denote fitness of a particular food source.  
 		/// The larger the fitness value, the better the food source</returns>
-		public delegate double Get(FoodSource foodSource, Bee bee);
+		public delegate double Get(LocationFoodSource foodSource, Bee bee);
 	}
 }

@@ -15,23 +15,20 @@ namespace ABCNet
 		private int scoutCount = 0;
 		private int employedCount = 0;
 		private int onlookerCount = 0;
-		private List<FoodSource> foodSources;
-		private Queue<FoodSource> newFoodSourceQueue;
+		private List<IFoodSource> foodSources;
+		private Queue<IFoodSource> newFoodSourceQueue;
 		private readonly object newFoodSourceQueueLock = new object();
 		private readonly object objFoodSource = new object();
-		private Fitness.Get fitnessGetFunction;
 
 		/// <summary>
 		/// Initialize the colony and the bee memories
 		/// </summary>
 		/// <param name="size"></param>
 		/// <param name="foodSources"></param>
-		/// <param name="fitnessGetFunction"></param>
-		public Colony(int size, List<FoodSource> foodSources, Fitness.Get fitnessGetFunction)
+		public Colony(int size, List<IFoodSource> foodSources)
 		{
 			this.foodSources = foodSources;
-			this.fitnessGetFunction = fitnessGetFunction;
-			this.newFoodSourceQueue = new Queue<FoodSource>();
+			this.newFoodSourceQueue = new Queue<IFoodSource>();
 			//Initialization
 			//Generate our bee counts and supply a random memory set for each bee.
 			scoutCount = (int)(.15 * size);
@@ -58,7 +55,7 @@ namespace ABCNet
 		/// Add a food source into the scout food source queue.  Thread safe.
 		/// </summary>
 		/// <param name="foodSource"></param>
-		public void AddFoodSource(FoodSource foodSource) {
+		public void AddFoodSource(IFoodSource foodSource) {
 			//stuff this into a queue to inspire the scouts to check it. 
 			lock (newFoodSourceQueueLock) {
 				newFoodSourceQueue.Enqueue(foodSource);
@@ -69,7 +66,7 @@ namespace ABCNet
 		/// Remove a food source from the food source list.  Thread safe.
 		/// </summary>
 		/// <param name="foodSource"></param>
-		public void RemoveFoodSource(FoodSource foodSource) {
+		public void RemoveFoodSource(IFoodSource foodSource) {
 			lock (objFoodSource) {
 				foodSources.Remove(foodSource);
 				Bees.ForEach(x => x.RandomSolution = GetUniqueRandoms(Rand, 0, foodSources.Count));
@@ -80,10 +77,10 @@ namespace ABCNet
 		/// Performs the colony search for the optimal food source.  Thread safe.
 		/// </summary>
 		/// <returns>A List of FoodSources that have been sorted by the fittest at the top.</returns>
-		public List<FoodSource> Run()
+		public List<IFoodSource> Run()
 		{
-			List<FoodSource> employedBeeSelection = new List<FoodSource>();
-			List<FoodSource> onlookerBeeSelection = new List<FoodSource>();
+			List<IFoodSource> employedBeeSelection = new List<IFoodSource>();
+			List<IFoodSource> onlookerBeeSelection = new List<IFoodSource>();
 			//Send Employeed Bees
 			Bees.Where(x => x.Status == Bee.StatusType.EMPLOYED).ToList().ForEach(bee => {
 				lock (objFoodSource) {
@@ -91,7 +88,7 @@ namespace ABCNet
 						bee, employedBeeSelection);
 				}
 			});
-			employedBeeSelection.Sort(new FoodSourceComparer());
+			employedBeeSelection.Sort((x, y) => x.Fitness.CompareTo(y.Fitness));
 			int topValue = (int)(employedBeeSelection.Count * .3d); //top 30% dances win for health.
 			//Each onlooker watches the dance of employed bees and chooses one of their sources depending on the dances, 
 			//and then goes to that source. After choosing a neighbour around that, she evaluates its nectar amount.
@@ -106,8 +103,7 @@ namespace ABCNet
 			lock (objFoodSource) {
 				//Abandoned food sources are determined and are replaced with the 
 				//new food sources discovered by scouts.
-				foodSources.Sort(new FoodSourceComparer());
-
+				foodSources.Sort((x, y) => x.Fitness.CompareTo(y.Fitness));
 				//Reset the foodsources where the trial count has gone > MaxVisits.
 				foodSources.Where(x => x.TrialsCount > MaxVisits).ToList().ForEach(x => { 
 					x.TrialsCount = 0;
@@ -115,11 +111,11 @@ namespace ABCNet
 				});
 
 				//Load resources for scouts to identify.
-				List<FoodSource> scoutFoodOptions = foodSources.Where(x => x.IsAbandoned).ToList();
-				if (scoutFoodOptions == null) scoutFoodOptions = new List<FoodSource>();
+				List<IFoodSource> scoutFoodOptions = foodSources.Where(x => x.IsAbandoned).ToList();
+				if (scoutFoodOptions == null) scoutFoodOptions = new List<IFoodSource>();
 				
 				lock (newFoodSourceQueueLock) {
-					while (newFoodSourceQueue.Count() > 0) {
+					while (newFoodSourceQueue.Count > 0) {
 						var fs = newFoodSourceQueue.Dequeue();
 						scoutFoodOptions.Add(fs);
 						lock (objFoodSource) foodSources.Add(fs);
@@ -148,30 +144,29 @@ namespace ABCNet
 		/// <param name="primaryFoodSource">Primary food source.</param>
 		/// <param name="bee">Bee.</param>
 		/// <param name="foodSourceSelection">Food source selection.</param>
-		private void PerformBeePrimaryAndNeighborFitness(FoodSource primaryFoodSource, 
-		                                                 Bee bee, List<FoodSource> foodSourceSelection) {
-			var primaryFoodSourceCoordinate = primaryFoodSource.Location.GeoCoordinate;
+		private void PerformBeePrimaryAndNeighborFitness(IFoodSource primaryFoodSource, 
+		                                                 Bee bee, List<IFoodSource> foodSourceSelection) {
 			double distanceLocation = double.MaxValue;
-			FoodSource neighbor = null;
+			IFoodSource neighbor = null;
 			foreach(var source in foodSources) {
 				//Ignore if the current source is the same
 				if (source.ToString() == primaryFoodSource.ToString()) continue;
 				//Locate the nearest neighbor that is not abandoned.
 				if (source.IsAbandoned) continue;
-				double distance = source.Location.GeoCoordinate.GetDistanceTo(primaryFoodSourceCoordinate);
+				double distance = source.CalculateDistance(primaryFoodSource);
 				if (distance < distanceLocation) {
 					neighbor = source;
 				}
 			}
 			//Each employed bee goes to a food source in her memory and determines a neighbour source, 
 			//then evaluates its nectar amount and dances in the hive
-			primaryFoodSource.FitnessValue = this.fitnessGetFunction(primaryFoodSource, bee);
-			if (primaryFoodSource.FitnessValue <= 0) primaryFoodSource.IsAbandoned = true;
+			primaryFoodSource.Fitness = primaryFoodSource.CalculateFitness(bee);
+			if (primaryFoodSource.Fitness <= 0) primaryFoodSource.IsAbandoned = true;
 			primaryFoodSource.TrialsCount++;
 			foodSourceSelection.Add(primaryFoodSource);
 			if (neighbor != null) {
-				neighbor.FitnessValue = this.fitnessGetFunction(neighbor, bee);
-				if (neighbor.FitnessValue <= 0) neighbor.IsAbandoned = true;
+				neighbor.Fitness = primaryFoodSource.CalculateFitness(bee);
+				if (neighbor.Fitness <= 0) neighbor.IsAbandoned = true;
 				neighbor.TrialsCount++;
 				foodSourceSelection.Add(neighbor);
 			}

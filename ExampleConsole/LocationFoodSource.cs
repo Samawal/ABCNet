@@ -23,29 +23,31 @@ namespace ABCNet
         }
     }
 
-    public class FoodSource
+    public class LocationFoodSource : IFoodSource
     {
-        public FoodSource(FoodSourceLocation location) {
+        public LocationFoodSource(FoodSourceLocation location) {
             Location = location;
         }
         public FoodSourceLocation Location { get; set; }
         public int TrialsCount { get; set; }
-        public double FitnessValue { get; set; }
+        public double Fitness { get; set; }
         public bool IsAbandoned { get; set; }
 
-		private string uniqueName = Guid.NewGuid().ToString("N");
+        private string uniqueName = Guid.NewGuid().ToString("N");
 
 		public override string ToString()
 		{
 			return uniqueName;
 		}
-    }
 
-    public class FoodSourceComparer : IComparer<FoodSource> {
-        public int Compare(FoodSource x, FoodSource y) {
-            if (x.FitnessValue < y.FitnessValue) return 1; //y is greater
-            else if (x.FitnessValue > y.FitnessValue) return -1; //x is greater
-            else return 0; //equal
+        public double CalculateDistance(IFoodSource other)
+        {
+            return Location.GeoCoordinate.GetDistanceTo((other as LocationFoodSource).Location.GeoCoordinate);
+        }
+
+        public double CalculateFitness(Bee bee)
+        {
+            return Location.GeoCoordinate.Latitude;
         }
     }
 }

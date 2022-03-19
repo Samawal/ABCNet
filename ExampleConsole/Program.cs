@@ -8,33 +8,50 @@ namespace ExampleConsole
     {
 		private static Random random = new Random(Guid.NewGuid().GetHashCode());
 
-        public static double FitnessCheck(FoodSource foodSource, Bee bee) {
-            var geo = foodSource.Location.GeoCoordinate;
-            //Console.WriteLine(string.Format("{0:0.##}, {1:0.##}", geo.Latitude, geo.Longitude));
-			return random.NextDouble();
-        }
-
         static void Main(string[] args)
         {
-            List<FoodSource> foodSources = new List<FoodSource>();
-            for (int i = 0; i < 10; i++) {
-				foodSources.Add(new FoodSource(FoodSourceLocation.GenerateRandom(random)));
-            }
-			for (int i = 0; i < 50; i++)
-			{
-				Colony colony = new Colony(100, foodSources, FitnessCheck);
+            CharTest();
+        }
 
-				var fittestSources = colony.Run();
-				fittestSources.ForEach(x =>
-				{
-					Console.WriteLine(string.Format("{0:0.000} => {1}", x.FitnessValue, x.ToString()));
-				});
-				Console.WriteLine("==============================");
-			}
-            //Console.ForegroundColor = ConsoleColor.Yellow;
-            //Console.WriteLine("Press enter to exit.");
-            // Console.ReadLine();
-            return;
+        private static void LocationTest()
+        {
+            List<IFoodSource> foodSources = new List<IFoodSource>();
+            for (int i = 0; i < 10; i++)
+            {
+                foodSources.Add(new LocationFoodSource(FoodSourceLocation.GenerateRandom(random)));
+            }
+            for (int i = 0; i < 50; i++)
+            {
+                Colony colony = new Colony(100, foodSources);
+
+                var fittestSources = colony.Run();
+                fittestSources.ForEach(x =>
+                {
+                    Console.WriteLine(string.Format("{0:0.000} => {1}", x.Fitness, x.ToString()));
+                });
+                Console.WriteLine("==============================");
+            }
+        }
+
+
+        private static void CharTest()
+        {
+            List<IFoodSource> foodSources = new List<IFoodSource>();
+            for (int i = 0; i < 10; i++)
+            {
+                foodSources.Add(new CharFoodSource((char)random.Next('A', 'z')));
+            }
+            for (int i = 0; i < 50; i++)
+            {
+                Colony colony = new Colony(100, foodSources);
+
+                var fittestSources = colony.Run();
+                fittestSources.ForEach(x =>
+                {
+                    Console.WriteLine(string.Format("{0:0.000} => {1}", x.Fitness, x.ToString()));
+                });
+                Console.WriteLine("==============================");
+            }
         }
     }
 }
